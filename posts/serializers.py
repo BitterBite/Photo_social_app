@@ -1,4 +1,3 @@
-# posts/serializers.py
 from rest_framework import serializers
 from .models import Post, Image, Comment, Like, Location
 from django.contrib.auth import get_user_model

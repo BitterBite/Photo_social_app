@@ -1,4 +1,4 @@
-# posts/views.py
+import logging
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -9,6 +9,10 @@ from .models import Post, Comment, Like, Location, Image
 from .serializers import PostSerializer, CommentSerializer, ImageSerializer
 from django.shortcuts import render
 from drf_spectacular.utils import extend_schema
+from .permissions import IsAuthorOrReadOnly
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 def home(request):
     return render(request, 'home.html')
@@ -16,7 +20,7 @@ def home(request):
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAuthorOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
 
     @extend_schema(
@@ -40,13 +44,19 @@ class PostViewSet(viewsets.ModelViewSet):
         responses={201: PostSerializer, 400: "Bad Request"}
     )
     def create(self, request, *args, **kwargs):
-        print("Authorization header:", request.META.get('HTTP_AUTHORIZATION'))
-        print("Request data:", request.data)
-        print("Request files:", request.FILES)
+        logger.info("Authorization header: %s", request.META.get('HTTP_AUTHORIZATION'))
+        logger.info("Request data: %s", request.data)
+        logger.info("Request files: %s", request.FILES)
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        post = self.get_object()
+        if post.author != request.user:
+            raise PermissionDenied("Вы не можете редактировать этот пост.")
+        return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         post = self.get_object()
@@ -69,7 +79,7 @@ class PostViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
-        print("Authorization header:", request.META.get('HTTP_AUTHORIZATION'))
+        logger.info("Authorization header: %s", request.META.get('HTTP_AUTHORIZATION'))
         post = self.get_object()
         Like.objects.get_or_create(post=post, user=request.user)
         return Response({'status': 'liked'}, status=201)
